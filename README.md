@@ -67,20 +67,24 @@
 
 ```
 Credit-Card-Default-Prediction/
-├── MISY262_code.Rmd                          # 主分析代码（RMarkdown）
-├── MISY262-code.html                         # 渲染后的 HTML 报告
-├── UCI_Credit_Card.csv                       # 数据集
-├── MISY262_final_paper.pdf                   # 最终论文
-├── MISY262_presentation_slides.pdf           # 演示幻灯片
-├── Group Project.pdf                         # 项目说明文档
-├── Group2_Credit_Default_Presentation_Script.docx  # 演讲稿
-├── Group Project Presentation Schedule.xlsx # 演示时间安排
-├── CSWIM Template.docx                       # 报告模板
-├── roc_logit.png                             # 逻辑回归 ROC 曲线
-├── roc_tree.png                              # 决策树 ROC 曲线
-├── roc_rf.png                                # 随机森林 ROC 曲线
-├── roc_xgb.png                               # XGBoost ROC 曲线
-├── roc_ens.png                               # 集成模型 ROC 曲线
+├── code/
+│   ├── MISY262_code.Rmd          # 主分析代码（RMarkdown）
+│   └── MISY262-code.html         # 渲染后的 HTML 报告
+├── data/
+│   └── UCI_Credit_Card.csv       # 数据集（30,000 条记录）
+├── figures/
+│   ├── roc_logit.png             # 逻辑回归 ROC 曲线
+│   ├── roc_tree.png              # 决策树 ROC 曲线
+│   ├── roc_rf.png                # 随机森林 ROC 曲线
+│   ├── roc_xgb.png               # XGBoost ROC 曲线
+│   └── roc_ens.png               # 集成模型 ROC 曲线
+├── docs/
+│   ├── MISY262_final_paper.pdf              # 最终论文
+│   ├── MISY262_presentation_slides.pdf      # 演示幻灯片
+│   ├── Group Project.pdf                    # 项目说明文档
+│   ├── Group2_Credit_Default_Presentation_Script.docx  # 演讲稿
+│   ├── Group Project Presentation Schedule.xlsx        # 演示时间安排
+│   └── CSWIM Template.docx                 # 报告模板
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -105,9 +109,7 @@ Credit-Card-Default-Prediction/
                        "naniar", "mice"))
    ```
 
-3. 在 RStudio 中打开 `MISY262_code.Rmd`，点击 **Knit** 运行全部代码并生成 HTML 报告。
-
-> 确保 `UCI_Credit_Card.csv` 与 `.Rmd` 文件在同一目录下，或修改代码中的路径。
+3. 在 RStudio 中打开 `code/MISY262_code.Rmd`，将第 47 行数据读取路径修改为 `"../data/UCI_Credit_Card.csv"`，点击 **Knit** 运行全部代码并生成 HTML 报告。
 
 ---
 
@@ -157,15 +159,15 @@ AUC = 0.778，五模型中排名第一（与集成模型持平），准确率 82
 
 | 逻辑回归 | 决策树 |
 |:---:|:---:|
-| ![ROC Logistic](roc_logit.png) | ![ROC Tree](roc_tree.png) |
+| ![ROC Logistic](figures/roc_logit.png) | ![ROC Tree](figures/roc_tree.png) |
 
 | 随机森林 | XGBoost |
 |:---:|:---:|
-| ![ROC RF](roc_rf.png) | ![ROC XGB](roc_xgb.png) |
+| ![ROC RF](figures/roc_rf.png) | ![ROC XGB](figures/roc_xgb.png) |
 
 <p align="center">
   <strong>代价敏感集成</strong><br/>
-  <img src="roc_ens.png" width="400" />
+  <img src="figures/roc_ens.png" width="400" />
 </p>
 
 ---
@@ -213,20 +215,24 @@ Evaluation metrics: confusion matrix, accuracy, AUC (area under ROC curve), and 
 
 ```
 Credit-Card-Default-Prediction/
-├── MISY262_code.Rmd                          # Main analysis code (RMarkdown)
-├── MISY262-code.html                         # Rendered HTML report
-├── UCI_Credit_Card.csv                       # Dataset
-├── MISY262_final_paper.pdf                   # Final written report
-├── MISY262_presentation_slides.pdf           # Presentation slides
-├── Group Project.pdf                         # Project assignment sheet
-├── Group2_Credit_Default_Presentation_Script.docx  # Presentation script
-├── Group Project Presentation Schedule.xlsx # Presentation schedule
-├── CSWIM Template.docx                       # Report template
-├── roc_logit.png                             # ROC – Logistic Regression
-├── roc_tree.png                              # ROC – Decision Tree
-├── roc_rf.png                                # ROC – Random Forest
-├── roc_xgb.png                               # ROC – XGBoost
-├── roc_ens.png                               # ROC – Cost-sensitive Ensemble
+├── code/
+│   ├── MISY262_code.Rmd          # Main analysis code (RMarkdown)
+│   └── MISY262-code.html         # Rendered HTML report
+├── data/
+│   └── UCI_Credit_Card.csv       # Dataset (30,000 records)
+├── figures/
+│   ├── roc_logit.png             # ROC – Logistic Regression
+│   ├── roc_tree.png              # ROC – Decision Tree
+│   ├── roc_rf.png                # ROC – Random Forest
+│   ├── roc_xgb.png               # ROC – XGBoost
+│   └── roc_ens.png               # ROC – Cost-sensitive Ensemble
+├── docs/
+│   ├── MISY262_final_paper.pdf              # Final written report
+│   ├── MISY262_presentation_slides.pdf      # Presentation slides
+│   ├── Group Project.pdf                    # Project assignment sheet
+│   ├── Group2_Credit_Default_Presentation_Script.docx  # Presentation script
+│   ├── Group Project Presentation Schedule.xlsx        # Presentation schedule
+│   └── CSWIM Template.docx                 # Report template
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -251,9 +257,7 @@ Credit-Card-Default-Prediction/
                        "naniar", "mice"))
    ```
 
-3. Open `MISY262_code.Rmd` in RStudio and click **Knit** to run all code and generate the HTML report.
-
-> Make sure `UCI_Credit_Card.csv` is in the same directory as the `.Rmd` file, or update the path in the code.
+3. Open `code/MISY262_code.Rmd` in RStudio, update the data path on line 47 to `"../data/UCI_Credit_Card.csv"`, then click **Knit** to run all code and generate the HTML report.
 
 ---
 
@@ -261,15 +265,15 @@ Credit-Card-Default-Prediction/
 
 | Logistic Regression | Decision Tree |
 |:---:|:---:|
-| ![ROC Logistic](roc_logit.png) | ![ROC Tree](roc_tree.png) |
+| ![ROC Logistic](figures/roc_logit.png) | ![ROC Tree](figures/roc_tree.png) |
 
 | Random Forest | XGBoost |
 |:---:|:---:|
-| ![ROC RF](roc_rf.png) | ![ROC XGB](roc_xgb.png) |
+| ![ROC RF](figures/roc_rf.png) | ![ROC XGB](figures/roc_xgb.png) |
 
 <p align="center">
   <strong>Cost-sensitive Ensemble</strong><br/>
-  <img src="roc_ens.png" width="400" />
+  <img src="figures/roc_ens.png" width="400" />
 </p>
 
 ---
