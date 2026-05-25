@@ -1,0 +1,10 @@
+# R workspace artifacts
+.RData
+.RDataTmp
+.Rhistory
+*.Rproj
+.Rproj.user/
+
+# OS
+.DS_Store
+Thumbs.db

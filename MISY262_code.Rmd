@@ -1,0 +1,619 @@
+---
+title: "MISY262 presentation by group 2"
+output:
+  html_document:
+    df_print: paged
+---
+
+---
+
+### Credit Card Default Project - Full EDA + Multiple Models
+
+This script:
+- Loads the UCI credit card default dataset
+- Performs basic EDA and descriptive statistics
+- Explores and (optionally) imputes missing data
+- Preprocesses variables (factors, target, etc.)
+- Trains multiple ML models for default prediction: Logistic Regression, Decision Tree, Random Forest, XGBoost, Cost-sensitive ensemble (custom "new" method)
+- Compares their performance
+
+---
+
+# 0. Setup environment #
+
+```{r}
+rm(list = ls())  # clear workspace
+
+# Optional: set working directory where UCI_Credit_Card.csv is stored
+# setwd("YOUR/PATH/HERE")
+
+# Load required packages
+# If not installed, run install.packages("package_name")
+library(dplyr)        # data manipulation
+library(ggplot2)      # basic plots
+library(caret)        # train/test split and evaluation
+library(pROC)         # ROC and AUC
+library(rpart)        # decision tree
+library(randomForest) # random forest
+library(xgboost)      # gradient boosting
+library(naniar)       # missing-data visualization
+library(mice)      # multiple imputation by chained equations
+```
+
+# 1. Load the dataset  #
+
+```{r}
+# Read the UCI credit card default dataset
+credit <- read.csv("UCI_Credit_Card.csv")
+```
+
+# 2. Basic EDA: structure and descriptive stats #
+
+```{r}
+# Basic information about the dataset
+n_rows <- nrow(credit)
+n_cols <- ncol(credit)
+
+cat("Number of rows:", n_rows, "\n")
+cat("Number of columns:", n_cols, "\n")
+
+# Display variable names
+cat("Variable names:\n")
+print(names(credit))
+
+# Peek at the first few rows
+head(credit)
+
+# Structure of the dataset: variable types and examples
+str(credit)
+
+# Basic summary statistics (for all variables)
+summary(credit)
+
+# Example: descriptive statistics for a key financial variable
+# LIMIT_BAL is the amount of the given credit (NT dollar)
+summary(credit$LIMIT_BAL)
+
+# Distribution of the target variable (0/1 default flag)
+# Original target name in this dataset is "default.payment.next.month"
+table(credit$default.payment.next.month)
+prop.table(table(credit$default.payment.next.month))
+
+```
+
+# 3. Missing data exploration (based on course EDA slides) #
+
+```{r}
+# Overall number of missing values in the dataset
+total_na <- sum(is.na(credit))
+cat("Total number of missing values in the dataset:", total_na, "\n")
+
+# Number of missing values per variable
+na_per_col <- colSums(is.na(credit))
+cat("Number of missing values per column:\n")
+print(na_per_col)
+
+# Visualization of missing data patterns using naniar
+# This will create a heatmap of missingness
+vis_miss(credit)
+
+# This will show percentage of missing per variable
+gg_miss_var(credit, show_pct = TRUE)
+
+# Note:
+# In the original UCI credit card dataset, there are typically no NA values.
+# If your version of the dataset has no missing data, the above outputs
+# will show zero NAs. In that case, data imputation is not required and
+# you can explicitly state this in your report.
+```
+
+# 4. Missing-data imputation framework (mice) #
+
+```{r}
+# We use the result from Task 03:
+
+# total_na = total number of missing values in "credit".
+
+# If there are no missing values, we skip the imputation step.
+
+if (total_na == 0) {
+cat("There are no missing values in this dataset, so no imputation is performed.\n")
+
+# For consistency in later code, we simply set:
+
+credit_imputed <- credit
+
+} else {
+cat("Some variables contain missing values. We illustrate multiple imputation using the mice package.\n")
+
+# Visualize the missing-data pattern
+
+md.pattern(credit)   # table + pattern plot
+
+# Run multiple imputation by chained equations
+
+imputed <- mice(
+credit,
+m      = 3,        # number of imputed datasets
+method = "pmm",    # predictive mean matching for numeric variables
+maxit  = 5         # number of iterations
+)
+
+# Choose one completed dataset (for example, dataset 2)
+
+credit_imputed <- complete(imputed, 2)
+
+# From this point on, you could continue the analysis using
+
+# 'credit_imputed' instead of 'credit'.
+
+}
+
+# In the UCI_Credit_Card dataset used in this project, there are typically
+
+# no missing values, so credit_imputed == credit in practice.
+
+```
+
+# 5. Variable type preprocessing #
+
+```{r}
+# Drop ID (identifier, not useful for prediction)
+credit <- credit %>% dplyr::select(-ID)
+
+# Rename the target variable for convenience
+colnames(credit)[colnames(credit) == "default.payment.next.month"] <- "default_next_month"
+
+# Convert target to factor: 0 -> no_default, 1 -> default
+credit$default_next_month <- factor(
+  credit$default_next_month,
+  levels = c(0, 1),
+  labels = c("no_default", "default")
+)
+
+# Define variables that should be treated as categorical
+categorical_vars <- c(
+  "SEX",
+  "EDUCATION",
+  "MARRIAGE",
+  "PAY_0",
+  "PAY_2",
+  "PAY_3",
+  "PAY_4",
+  "PAY_5",
+  "PAY_6"
+)
+
+# Cast selected variables to factor
+credit[categorical_vars] <- lapply(credit[categorical_vars], factor)
+
+# Check the updated structure
+str(credit)
+
+
+```
+
+# 6. Train/test split for classification (PD)    #
+
+```{r}
+set.seed(123)  # for reproducibility
+
+# Create indices for the training set (70% of the data)
+train_index <- createDataPartition(
+  credit$default_next_month,
+  p   = 0.7,
+  list = FALSE
+)
+
+# Split the data into training and test sets
+train_data <- credit[train_index, ]
+test_data  <- credit[-train_index, ]
+
+# Make sure factor levels are consistent between train and test
+# This avoids errors such as "new levels" in the test set
+# (e.g., PAY_4 having a level in test_data that was not seen in train_data).
+
+# IMPORTANT: this uses the 'categorical_vars' vector defined
+# in the variable preprocessing section.
+for (v in categorical_vars) {
+  # Drop unused levels in training data
+  train_data[[v]] <- droplevels(train_data[[v]])
+  
+  # Force test_data to use exactly the same levels as train_data.
+  # Any extra levels in test_data will be converted to NA.
+  test_data[[v]] <- factor(test_data[[v]], levels = levels(train_data[[v]]))
+}
+
+# Align target factor levels as well (usually already consistent)
+train_data$default_next_month <- droplevels(train_data$default_next_month)
+test_data$default_next_month  <- factor(
+  test_data$default_next_month,
+  levels = levels(train_data$default_next_month)
+)
+
+# Create numeric labels for models that require 0/1 (e.g., XGBoost)
+train_label <- ifelse(train_data$default_next_month == "default", 1, 0)
+test_label  <- ifelse(test_data$default_next_month == "default", 1, 0)
+
+# Quick sanity check
+table(train_data$default_next_month)
+table(test_data$default_next_month)
+
+```
+
+# 7. Model 1: Logistic Regression (baseline PD) #
+
+```{r}
+logit_model <- glm(
+  default_next_month ~ .,
+  data   = train_data,
+  family = binomial(link = "logit")
+)
+
+summary(logit_model)
+
+# Predicted probabilities on test data
+probs_logit <- predict(
+  logit_model,
+  newdata = test_data,
+  type    = "response"
+)
+
+# Class predictions with 0.5 cutoff
+pred_logit_class <- ifelse(probs_logit >= 0.5, "default", "no_default")
+pred_logit_class <- factor(pred_logit_class, levels = c("no_default", "default"))
+
+# Confusion matrix and metrics
+cm_logit <- confusionMatrix(
+  data      = pred_logit_class,
+  reference = test_data$default_next_month,
+  positive  = "default"
+)
+cm_logit
+
+# ROC and AUC for logistic regression
+roc_logit <- roc(
+  response  = test_data$default_next_month,
+  predictor = probs_logit,
+  levels    = c("no_default", "default"),
+  direction = "<"
+)
+auc_logit <- auc(roc_logit)
+auc_logit
+
+```
+
+# 8. Model 2: Decision Tree (rpart) #
+
+```{r}
+tree_model <- rpart(
+  default_next_month ~ .,
+  data   = train_data,
+  method = "class"
+)
+
+# Predicted probabilities for "default"
+probs_tree <- predict(
+  tree_model,
+  newdata = test_data,
+  type   = "prob"
+)[, "default"]
+
+# Class predictions with 0.5 cutoff
+pred_tree_class <- ifelse(probs_tree >= 0.5, "default", "no_default")
+pred_tree_class <- factor(pred_tree_class, levels = c("no_default", "default"))
+
+cm_tree <- confusionMatrix(
+  data      = pred_tree_class,
+  reference = test_data$default_next_month,
+  positive  = "default"
+)
+cm_tree
+
+roc_tree <- roc(
+  response  = test_data$default_next_month,
+  predictor = probs_tree,
+  levels    = c("no_default", "default"),
+  direction = "<"
+)
+auc_tree <- auc(roc_tree)
+auc_tree
+```
+
+# 9. Model 3: Random Forest #
+
+```{r}
+set.seed(123)
+
+rf_model <- randomForest(
+  default_next_month ~ .,
+  data       = train_data,
+  ntree      = 300,
+  mtry       = 6,
+  importance = TRUE
+)
+
+# Predicted probabilities for "default"
+probs_rf <- predict(
+  rf_model,
+  newdata = test_data,
+  type   = "prob"
+)[, "default"]
+
+pred_rf_class <- ifelse(probs_rf >= 0.5, "default", "no_default")
+pred_rf_class <- factor(pred_rf_class, levels = c("no_default", "default"))
+
+cm_rf <- confusionMatrix(
+  data      = pred_rf_class,
+  reference = test_data$default_next_month,
+  positive  = "default"
+)
+cm_rf
+
+roc_rf <- roc(
+  response  = test_data$default_next_month,
+  predictor = probs_rf,
+  levels    = c("no_default", "default"),
+  direction = "<"
+)
+auc_rf <- auc(roc_rf)
+auc_rf
+
+```
+
+# 10. Model 4: XGBoost #
+
+```{r}
+###########################################
+# Task 10: XGBoost (NA-safe implementation)
+###########################################
+
+# For XGBoost, we create dedicated copies of the data
+# and drop any rows that contain NA values. This ensures
+# that the design matrices and label vectors have the
+# same number of rows.
+
+# Create NA-free versions for XGBoost
+train_xgb <- na.omit(train_data)
+test_xgb  <- na.omit(test_data)
+
+cat("Number of rows in train_data (original):", nrow(train_data), "\n")
+cat("Number of rows in train_xgb (NA-free):", nrow(train_xgb), "\n")
+
+cat("Number of rows in test_data (original):", nrow(test_data), "\n")
+cat("Number of rows in test_xgb (NA-free):", nrow(test_xgb), "\n")
+
+# Build model matrices with one-hot encoding for categorical variables
+train_matrix <- model.matrix(
+  default_next_month ~ . - 1,
+  data = train_xgb
+)
+test_matrix <- model.matrix(
+  default_next_month ~ . - 1,
+  data = test_xgb
+)
+
+# Create numeric labels (0/1) that match these NA-free data sets
+train_label <- ifelse(train_xgb$default_next_month == "default", 1, 0)
+test_label  <- ifelse(test_xgb$default_next_month == "default", 1, 0)
+
+# Sanity check: the number of labels must equal the number of rows
+stopifnot(length(train_label) == nrow(train_matrix))
+stopifnot(length(test_label)  == nrow(test_matrix))
+
+# Build DMatrix objects for XGBoost
+dtrain <- xgb.DMatrix(
+  data  = train_matrix,
+  label = train_label
+)
+dtest <- xgb.DMatrix(
+  data  = test_matrix,
+  label = test_label
+)
+
+# Define XGBoost parameters for binary classification
+params <- list(
+  objective        = "binary:logistic",
+  eval_metric      = "auc",
+  max_depth        = 4,
+  eta              = 0.1,
+  subsample        = 0.8,
+  colsample_bytree = 0.8
+)
+
+set.seed(123)
+xgb_model <- xgb.train(
+  params  = params,
+  data    = dtrain,
+  nrounds = 100,
+  verbose = 0
+)
+
+# Predicted probabilities from XGBoost
+probs_xgb <- predict(xgb_model, newdata = dtest)
+
+# Class predictions using 0.5 cutoff
+pred_xgb_class <- ifelse(probs_xgb >= 0.5, "default", "no_default")
+pred_xgb_class <- factor(pred_xgb_class, levels = c("no_default", "default"))
+
+# Confusion matrix
+cm_xgb <- confusionMatrix(
+  data      = pred_xgb_class,
+  reference = test_xgb$default_next_month,  # use the NA-free test labels
+  positive  = "default"
+)
+cm_xgb
+
+# ROC and AUC for XGBoost
+roc_xgb <- roc(
+  response  = test_xgb$default_next_month,
+  predictor = probs_xgb,
+  levels    = c("no_default", "default"),
+  direction = "<"
+)
+auc_xgb <- auc(roc_xgb)
+auc_xgb
+
+```
+
+# 11. Model 5 (NEW): Cost-sensitive ensemble decision rule #
+
+```{r}
+# We build the ensemble on the same test set that is used for XGBoost,
+# i.e., the NA-free test_xgb. This guarantees that all probability
+# vectors and label vectors have the same length.
+
+# Recompute probabilities from logistic regression and random forest
+# on test_xgb, so that they are aligned with probs_xgb.
+
+# Logistic regression probabilities on test_xgb
+probs_logit_ens <- predict(
+  logit_model,
+  newdata = test_xgb,
+  type    = "response"
+)
+
+# Random forest probabilities on test_xgb
+probs_rf_ens <- predict(
+  rf_model,
+  newdata = test_xgb,
+  type    = "prob"
+)[, "default"]
+
+# XGBoost probabilities on test_xgb were already computed as probs_xgb
+# in the XGBoost task, and they have length nrow(test_xgb).
+
+# Sanity check: all three vectors must have the same length
+stopifnot(
+  length(probs_logit_ens) == nrow(test_xgb),
+  length(probs_rf_ens)    == nrow(test_xgb),
+  length(probs_xgb)       == nrow(test_xgb)
+)
+
+# Ensemble probability as the simple average of the three models
+ensemble_probs <- (probs_logit_ens + probs_rf_ens + probs_xgb) / 3
+
+# Numeric labels (0/1) for cost-based threshold selection,
+# aligned with test_xgb
+ens_label <- ifelse(test_xgb$default_next_month == "default", 1, 0)
+
+# Cost parameters:
+#   cost_fn = cost of a false negative (missed default)
+#   cost_fp = cost of a false positive (rejecting a good client)
+cost_fn <- 10
+cost_fp <- 1
+
+# Cost function for a given threshold
+compute_cost <- function(threshold, probs, true_labels, cost_fn, cost_fp) {
+  # 1 = default, 0 = no_default
+  pred <- ifelse(probs >= threshold, 1, 0)
+  true <- true_labels
+  
+  tp <- sum(pred == 1 & true == 1)
+  fp <- sum(pred == 1 & true == 0)
+  fn <- sum(pred == 0 & true == 1)
+  tn <- sum(pred == 0 & true == 0)
+  
+  total_cost <- cost_fn * fn + cost_fp * fp
+  
+  return(list(
+    total_cost = total_cost,
+    tp = tp, fp = fp, fn = fn, tn = tn
+  ))
+}
+
+# Grid search for the best threshold on the ensemble probabilities
+threshold_grid <- seq(0.1, 0.9, by = 0.01)
+
+cost_results <- data.frame(
+  threshold  = threshold_grid,
+  total_cost = NA_real_
+)
+
+for (i in seq_along(threshold_grid)) {
+  th  <- threshold_grid[i]
+  res <- compute_cost(
+    threshold   = th,
+    probs       = ensemble_probs,
+    true_labels = ens_label,
+    cost_fn     = cost_fn,
+    cost_fp     = cost_fp
+  )
+  cost_results$total_cost[i] <- res$total_cost
+}
+
+# Find the threshold that minimizes the total expected cost
+best_index     <- which.min(cost_results$total_cost)
+best_threshold <- cost_results$threshold[best_index]
+best_threshold
+
+# Final class predictions using the optimal threshold
+pred_ens_class <- ifelse(ensemble_probs >= best_threshold, "default", "no_default")
+pred_ens_class <- factor(pred_ens_class, levels = c("no_default", "default"))
+
+# Confusion matrix for the ensemble method
+cm_ens <- confusionMatrix(
+  data      = pred_ens_class,
+  reference = test_xgb$default_next_month,  # use test_xgb, not test_data
+  positive  = "default"
+)
+cm_ens
+
+# ROC and AUC for the ensemble probabilities
+roc_ens <- roc(
+  response  = test_xgb$default_next_month,
+  predictor = ensemble_probs,
+  levels    = c("no_default", "default"),
+  direction = "<"
+)
+auc_ens <- auc(roc_ens)
+auc_ens
+
+```
+# 12: Save ROC curves as PNG figures #
+
+```{r}
+# 1) Logistic regression ROC
+png("roc_logit.png", width = 800, height = 600)
+plot(roc_logit,
+     main = "ROC Curve - Logistic Regression")
+dev.off()
+
+# 2) Decision tree ROC
+png("roc_tree.png", width = 800, height = 600)
+plot(roc_tree,
+     main = "ROC Curve - Decision Tree")
+dev.off()
+
+# 3) Random forest ROC
+png("roc_rf.png", width = 800, height = 600)
+plot(roc_rf,
+     main = "ROC Curve - Random Forest")
+dev.off()
+
+# 4) XGBoost ROC
+png("roc_xgb.png", width = 800, height = 600)
+plot(roc_xgb,
+     main = "ROC Curve - XGBoost")
+dev.off()
+
+# 5) Ensemble ROC
+png("roc_ens.png", width = 800, height = 600)
+plot(roc_ens,
+     main = "ROC Curve - Cost-sensitive Ensemble")
+dev.off()
+```
+
+
+# Summary (for report writing, not code output):
+
+EDA section:
+- Basic structure, summary statistics, and distribution of LIMIT_BAL
+- Class balance of default_next_month
+- Missing-data analysis (total NAs, per-variable NAs, vis_miss, gg_miss_var)
+- Conclusion: UCI_Credit_Card dataset has no (or very few) missing values, so no imputation was necessary (or describe the chosen method).
+
+Modeling section:
+- Five methods:(1) Logistic Regression (2) Decision Tree (3) Random Forest(4) XGBoost (5) Cost-sensitive ensemble (proposed method)
+- Compare AUC, accuracy, and cost-sensitive performance.
+- Interpret important variables from logistic / tree / RF models.
